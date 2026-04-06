@@ -27,7 +27,7 @@ struct Ticket {
     char emergency_contact[15];
 };
 
-char seat_map[MAX_SEATS + 1];
+char seat_map[MAX_SEATS];
 
 void line();
 void viewTrains();
@@ -123,8 +123,8 @@ int generateBookingID() {
     char line[200];
     while(fgets(line,sizeof(line),fp)) count++;
     fclose(fp);
+     printf("Processing.....\n");
     return count;
-    printf("Processing.....\n");
 }
 
 int isWindowSeat(int seat) {
@@ -222,7 +222,7 @@ void bookTicket() {
     strcpy(t.status,"CONFIRMED");
 
     printf("Passenger Name: ");
-    scanf("%s",t.passenger_name);
+    scanf(" %[^\n]", t.passenger_name);
 
     printf("Age: ");
     scanf("%d",&t.age);
@@ -249,6 +249,10 @@ void bookTicket() {
     }
 
     FILE *fp=fopen(TICKET_FILE,"a");
+    if(fp == NULL) {
+        printf("File error!\n");
+        return;
+    }
     fprintf(fp,"%d %d %s %d %c %d %s %s\n",
         t.booking_id,t.train_id,t.passenger_name,
         t.age,t.gender,t.seat_number,
@@ -357,7 +361,11 @@ void showSeatMap() {
     int tid,i;
     printf("Enter Train ID: ");
     scanf("%d",&tid);
-
+        if(findTrain(tid) == NULL) {
+        printf("Invalid Train ID\n");
+        return;
+    }
+    
     loadSeatMap(tid);
 
     printf("\nSeat Map (Horizontal View)\n\n");
