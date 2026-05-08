@@ -3,14 +3,13 @@
 #include <string.h>
 #include <unistd.h>
 
-#define GREEN "\033[1;32m"
-#define RED "\033[1;31m"
-#define CYAN "\033[1;36m"
-#define RESET "\033[0m"
-
 #define MAX_SEATS 50
-#define MAX_PASSENGERS 10
 #define TICKET_FILE "tickets.txt"
+
+#define CYAN "\033[1;36m"
+#define RED "\033[1;31m"
+#define WHITE "\033[1;37m"
+#define RESET "\033[0m"
 
 struct Train {
     int id;
@@ -25,6 +24,7 @@ struct Train {
 
 struct Ticket {
     int booking_id;
+    int pnr;
     int train_id;
     char passenger_name[50];
     int age;
@@ -44,22 +44,27 @@ void cancelTicket();
 void searchTrain();
 void showSeatMap();
 void loadSeatMap(int train_id);
+void getCoachName(int seat, char coach[]);
+
 int generateBookingID();
+int generatePNR();
+int isDuplicateBooking(char name[], int train_id);
 int isWindowSeat(int seat);
 int isSandwiched(int seat);
 int allocateSeat(char gender, int age, int want_window);
-struct Train* findTrain(int id);
-void getCoachName(int seat, char coach[]);
-void displayTicket(struct Ticket t, struct Train tr);
-float calculateFare(float baseFare, int age);
 int getDiscountPercent(int age);
+int countBookedSeats(int train_id);
+
+float calculateFare(float baseFare, int age);
+
+struct Train* findTrain(int id);
 
 struct Train trains[5] = {
     {101,"Rajdhani Express","Delhi","Mumbai",50,850.0,"06:00",3},
-    {102,"Shatabdi Express","Chennai","Bangalore",50,450.0,"07:30",5},
-    {103,"Duronto Express","Kolkata","Delhi",50,700.0,"22:00",2},
-    {104,"Garib Rath","Mumbai","Pune",50,120.0,"09:15",7},
-    {105,"Jan Shatabdi","Delhi","Agra",50,200.0,"08:00",1}
+    {102,"Shatabdi Express","Chennai","Bangalore",50,450.0,"07:30",1},
+    {103,"Duronto Express","Kolkata","Delhi",50,700.0,"22:00",5},
+    {104,"Garib Rath","Mumbai","Pune",50,120.0,"09:15",2},
+    {105,"Jan Shatabdi","Delhi","Agra",50,200.0,"08:00",4}
 };
 
 int trainCount = 5;
@@ -68,9 +73,12 @@ int main() {
     int choice;
 
     do {
-        printf("\n%s==============================%s\n", CYAN, RESET);
-        printf("%s   Train Seat Allocation System   %s\n", CYAN, RESET);
-        printf("%s==============================%s\n", CYAN, RESET);
+        printf(CYAN);
+        printf("\n=============================================\n");
+        printf("      Train Seat Allocation System\n");
+        printf("=============================================\n");
+        printf(RESET);
+
         printf("1. View All Trains\n");
         printf("2. Search Train\n");
         printf("3. Book Ticket\n");
@@ -82,12 +90,12 @@ int main() {
         scanf("%d",&choice);
 
         switch(choice) {
-            case 1: viewTrains(); break;
-            case 2: searchTrain(); break;
-            case 3: bookTicket(); break;
-            case 4: viewBookings(); break;
-            case 5: cancelTicket(); break;
-            case 6: showSeatMap(); break;
+            case 1: viewTrains(); sleep(1); break;
+            case 2: searchTrain(); sleep(1); break;
+            case 3: bookTicket(); sleep(1); break;
+            case 4: viewBookings(); sleep(1); break;
+            case 5: cancelTicket(); sleep(1); break;
+            case 6: showSeatMap(); sleep(1); break;
             case 7: printf("\nThank you.\n"); break;
             default: printf(RED "Invalid choice.\n" RESET);
         }
@@ -97,143 +105,100 @@ int main() {
 }
 
 void line() {
-    printf("\n--------------------------------------------------\n");
-}
-
-void getCoachName(int seat, char coach[]) {
-    if(seat >= 1 && seat <= 25) strcpy(coach, "S1");
-    else if(seat >= 26 && seat <= 50) strcpy(coach, "S2");
-    else strcpy(coach, "NA");
-}
-
-void displayTicket(struct Ticket t, struct Train tr) {
-    char coach[5];
-    getCoachName(t.seat_number, coach);
-    printf("\n------------------------------\n");
-    printf("        TRAIN TICKET\n");
-    printf("------------------------------\n");
-    printf("Booking ID : %d\n", t.booking_id);
-    printf("Passenger  : %s\n", t.passenger_name);
-    printf("Age        : %d\n", t.age);
-    printf("Gender     : %c\n", t.gender);
-    printf("Train      : %s\n", tr.name);
-    printf("Route      : %s -> %s\n", tr.from, tr.to);
-    printf("Coach      : %s\n", coach);
-    printf("Seat       : %s-%d\n", coach, t.seat_number);
-    printf("Platform   : %d\n", tr.platform);
-    printf("Fare       : %.0f\n", tr.fare);
-    printf("Status     : %s%s%s\n", strcmp(t.status, "CONFIRMED") == 0 ? GREEN : RED, t.status, RESET);
-    printf("------------------------------\n");
+    printf("\n------------------------------------------------------------\n");
 }
 
 void loadSeatMap(int train_id) {
     int i;
-    for(i=1;i<=MAX_SEATS;i++) seat_map[i]='0';
+    struct Ticket t;
+
+    for(i=1;i<=MAX_SEATS;i++)
+        seat_map[i]='0';
 
     FILE *fp=fopen(TICKET_FILE,"r");
-    if(fp==NULL) return;
+    if(fp==NULL)
+        return;
 
-    struct Ticket t;
-    while(fscanf(fp,"%d %d %s %d %c %d %s %s",
-        &t.booking_id,&t.train_id,t.passenger_name,
-        &t.age,&t.gender,&t.seat_number,
-        t.status,t.emergency_contact)==8) {
+    while(fscanf(fp,"%d %d %d %s %d %c %d %s %s",
+        &t.booking_id,
+        &t.pnr,
+        &t.train_id,
+        t.passenger_name,
+        &t.age,
+        &t.gender,
+        &t.seat_number,
+        t.status,
+        t.emergency_contact)==9) {
 
         if(t.train_id==train_id &&
            strcmp(t.status,"CONFIRMED")==0 &&
-           t.seat_number>=1 && t.seat_number<=MAX_SEATS) {
+           t.seat_number>=1 &&
+           t.seat_number<=MAX_SEATS) {
             seat_map[t.seat_number]=t.gender;
         }
     }
+
     fclose(fp);
 }
 
 int generateBookingID() {
     int count=1001;
-    FILE *fp=fopen(TICKET_FILE,"r");
-    if(fp==NULL) return count;
     char line[200];
-    while(fgets(line,sizeof(line),fp)) count++;
+
+    FILE *fp=fopen(TICKET_FILE,"r");
+    if(fp==NULL)
+        return count;
+
+    while(fgets(line,sizeof(line),fp))
+        count++;
+
     fclose(fp);
     return count;
 }
 
-int isWindowSeat(int seat) {
-    return (seat%3==1);
+int generatePNR() {
+    int count=100000;
+    char line[200];
+
+    FILE *fp=fopen(TICKET_FILE,"r");
+    if(fp==NULL)
+        return count;
+
+    while(fgets(line,sizeof(line),fp))
+        count++;
+
+    fclose(fp);
+    return count;
 }
 
-int isSandwiched(int seat) {
-    if(seat<=1 || seat>=MAX_SEATS) return 0;
+int isDuplicateBooking(char name[], int train_id) {
+    FILE *fp=fopen(TICKET_FILE,"r");
+    struct Ticket t;
 
-    char left = seat_map[seat-1];
-    char right = seat_map[seat+1];
+    if(fp==NULL)
+        return 0;
 
-    if(left!='0' && right!='0')
-        return 1;
+    while(fscanf(fp,"%d %d %d %s %d %c %d %s %s",
+        &t.booking_id,
+        &t.pnr,
+        &t.train_id,
+        t.passenger_name,
+        &t.age,
+        &t.gender,
+        &t.seat_number,
+        t.status,
+        t.emergency_contact)==9) {
 
+        if(strcmp(t.passenger_name,name)==0 &&
+           t.train_id==train_id &&
+           strcmp(t.status,"CONFIRMED")==0) {
+            fclose(fp);
+            return 1;
+        }
+    }
+
+    fclose(fp);
     return 0;
-}
-
-int allocateSeat(char gender,int age,int want_window) {
-    int seat;
-
-    if(want_window==1) {
-        for(seat=1;seat<=MAX_SEATS;seat++) {
-            if(seat_map[seat]=='0' && isWindowSeat(seat))
-                return seat;
-        }
-    }
-
-    if(want_window==0) {
-        for(seat=1;seat<=MAX_SEATS;seat++) {
-            if(seat_map[seat]=='0' && !isWindowSeat(seat))
-                return seat;
-        }
-    }
-
-    if(age<12) {
-        for(seat=1;seat<=10;seat++)
-            if(seat_map[seat]=='0') return seat;
-    }
-
-    if(gender=='F' || gender=='C') {
-        for(seat=1;seat<=MAX_SEATS;seat++)
-            if(seat_map[seat]=='0') return seat;
-    }
-
-    if(gender=='M') {
-        for(seat=1;seat<=MAX_SEATS;seat++)
-            if(seat_map[seat]=='0' && !isSandwiched(seat)) return seat;
-
-        for(seat=1;seat<=MAX_SEATS;seat++)
-            if(seat_map[seat]=='0') return seat;
-    }
-
-    return -1;
-}
-
-void viewTrains() {
-    int i;
-    line();
-    printf(CYAN);
-    printf("ID   Name                 From       To         Fare   Dep   Plat\n");
-    printf(RESET);
-    for(i=0;i<trainCount;i++) {
-        printf("%-4d %-20s %-10s %-10s %-6.0f %-5s %-4d\n",
-            trains[i].id,trains[i].name,
-            trains[i].from,trains[i].to,
-            trains[i].fare,trains[i].departure,trains[i].platform);
-    }
-    line();
-    printf("Processing...\n");
-    sleep(1);
-}
-
-struct Train* findTrain(int id) {
-    int i;
-    for(i=0;i<trainCount;i++)
-        if(trains[i].id==id) return &trains[i];
-    return NULL;
 }
 
 int getDiscountPercent(int age) {
@@ -246,231 +211,589 @@ int getDiscountPercent(int age) {
 }
 
 float calculateFare(float baseFare, int age) {
-    int discount = getDiscountPercent(age);
+    int discount=getDiscountPercent(age);
     return baseFare - (baseFare * discount / 100);
 }
 
+void getCoachName(int seat, char coach[]) {
+    if(seat <= 25)
+        strcpy(coach,"S1");
+    else
+        strcpy(coach,"S2");
+}
+
+int isWindowSeat(int seat) {
+    return (seat%3==1);
+}
+
+int isSandwiched(int seat) {
+    char left,right;
+
+    if(seat<=1 || seat>=MAX_SEATS)
+        return 0;
+
+    left=seat_map[seat-1];
+    right=seat_map[seat+1];
+
+    if(left!='0' && right!='0')
+        return 1;
+
+    return 0;
+}
+
+int allocateSeat(char gender,int age,int want_window) {
+    int seat;
+
+    if(age<12) {
+        for(seat=1;seat<=10;seat++) {
+            if(seat_map[seat]=='0')
+                return seat;
+        }
+    }
+
+    if(age>60) {
+        for(seat=1;seat<=MAX_SEATS;seat++) {
+            if(seat_map[seat]=='0')
+                return seat;
+        }
+    }
+
+    if(want_window==1) {
+        for(seat=1;seat<=MAX_SEATS;seat++) {
+            if(seat_map[seat]=='0' && isWindowSeat(seat))
+                return seat;
+        }
+    }
+
+    if(gender=='M') {
+        for(seat=1;seat<=MAX_SEATS;seat++) {
+            if(seat_map[seat]=='0' && !isSandwiched(seat))
+                return seat;
+        }
+    }
+
+    for(seat=1;seat<=MAX_SEATS;seat++) {
+        if(seat_map[seat]=='0')
+            return seat;
+    }
+
+    return -1;
+}
+
+int countBookedSeats(int train_id) {
+    int booked=0;
+    int i;
+
+    loadSeatMap(train_id);
+
+    for(i=1;i<=MAX_SEATS;i++) {
+        if(seat_map[i]!='0')
+            booked++;
+    }
+
+    return booked;
+}
+
+void viewTrains() {
+    int i,booked,available;
+
+    line();
+    printf(CYAN "ID   Name                 From       To         Fare   Dep    Plat  Avail\n" RESET);
+
+    for(i=0;i<trainCount;i++) {
+        booked=countBookedSeats(trains[i].id);
+        available=trains[i].total_seats-booked;
+
+        printf("%-4d %-20s %-10s %-10s %-6.0f %-6s %-5d %-5d\n",
+            trains[i].id,
+            trains[i].name,
+            trains[i].from,
+            trains[i].to,
+            trains[i].fare,
+            trains[i].departure,
+            trains[i].platform,
+            available);
+    }
+
+    line();
+}
+
+struct Train* findTrain(int id) {
+    int i;
+
+    for(i=0;i<trainCount;i++) {
+        if(trains[i].id==id)
+            return &trains[i];
+    }
+
+    return NULL;
+}
+
+void printTicket(struct Ticket t, struct Train *tr) {
+    char coach[5];
+    float finalFare;
+    int discount;
+
+    getCoachName(t.seat_number,coach);
+
+    finalFare=calculateFare(tr->fare,t.age);
+    discount=getDiscountPercent(t.age);
+
+    printf(CYAN "\n====================================\n" RESET);
+    printf(WHITE "           TRAIN TICKET\n" RESET);
+    printf(CYAN "====================================\n" RESET);
+    printf("Booking ID : %d\n",t.booking_id);
+    printf("PNR        : %d\n",t.pnr);
+    printf("Passenger  : %s\n",t.passenger_name);
+    printf("Age        : %d\n",t.age);
+    printf("Gender     : %c\n",t.gender);
+    printf("Train      : %s\n",tr->name);
+    printf("Route      : %s to %s\n",tr->from,tr->to);
+    printf("Coach      : %s\n",coach);
+    printf("Seat       : %s-%d\n",coach,t.seat_number);
+    printf("Platform   : %d\n",tr->platform);
+    printf("Base Fare  : %.0f\n",tr->fare);
+    printf("Discount   : %d%%\n",discount);
+    printf("Final Fare : %.0f\n",finalFare);
+    printf("Status     : %s\n",t.status);
+    printf(CYAN "====================================\n" RESET);
+}
 
 void bookTicket() {
     int train_id;
-    struct Ticket t;
+    int passengers;
+    int i;
     int want_window;
-    float finalFare;
-    int discount;
+    struct Ticket t;
 
     viewTrains();
 
     printf("\nEnter Train ID: ");
     scanf("%d",&train_id);
 
-    struct Train *tr = findTrain(train_id);
+    struct Train *tr=findTrain(train_id);
 
-    if(tr == NULL) {
-        printf("Train not found.\n");
+    if(tr==NULL) {
+        printf(RED "Train not found.\n" RESET);
         return;
     }
 
-    t.train_id = train_id;
-    t.booking_id = generateBookingID();
-    strcpy(t.status,"CONFIRMED");
+    printf("Enter number of passengers: ");
+    scanf("%d",&passengers);
 
-    printf("Passenger Name: ");
-    scanf("%s",t.passenger_name);
+    if(passengers<=0) {
+        printf(RED "Invalid number of passengers.\n" RESET);
+        return;
+    }
 
-    printf("Age: ");
-    scanf("%d",&t.age);
+    for(i=1;i<=passengers;i++) {
+        printf("\nPassenger %d Details\n",i);
 
-    if(t.age < 12) {
-        t.gender = 'C';
+        t.train_id=train_id;
+        t.booking_id=generateBookingID();
+        t.pnr=generatePNR();
+        strcpy(t.status,"CONFIRMED");
+
+        printf("Passenger Name: ");
+        scanf("%s",t.passenger_name);
+
+        if(isDuplicateBooking(t.passenger_name,train_id)) {
+            printf(RED "Duplicate booking found for this passenger.\n" RESET);
+            continue;
+        }
+
+        printf("Age: ");
+        scanf("%d",&t.age);
+
+        if(t.age<12) {
+            t.gender='C';
+        } else {
+            printf("Gender (M/F): ");
+            scanf(" %c",&t.gender);
+        }
+
         printf("Emergency Contact: ");
         scanf("%s",t.emergency_contact);
-    } else {
-        printf("Gender (M/F): ");
-        scanf(" %c",&t.gender);
-        strcpy(t.emergency_contact,"N/A");
+
+        printf("Window seat required (1/0): ");
+        scanf("%d",&want_window);
+
+        loadSeatMap(train_id);
+
+        t.seat_number=allocateSeat(t.gender,t.age,want_window);
+
+        if(t.seat_number==-1) {
+            printf(RED "No seats available.\n" RESET);
+            continue;
+        }
+
+        FILE *fp=fopen(TICKET_FILE,"a");
+
+        if(fp==NULL) {
+            printf(RED "File error.\n" RESET);
+            return;
+        }
+
+        fprintf(fp,"%d %d %d %s %d %c %d %s %s\n",
+            t.booking_id,
+            t.pnr,
+            t.train_id,
+            t.passenger_name,
+            t.age,
+            t.gender,
+            t.seat_number,
+            t.status,
+            t.emergency_contact);
+
+        fclose(fp);
+
+        printf("\nTicket Confirmed!\n");
+        printTicket(t,tr);
     }
 
-    printf("Window seat required (1/0): ");
-    scanf("%d",&want_window);
-
-    loadSeatMap(train_id);
-
-    t.seat_number = allocateSeat(t.gender,t.age,want_window);
-
-    if(t.seat_number == -1) {
-        printf("No seats available.\n");
-        return;
-    }
-
-    FILE *fp = fopen(TICKET_FILE,"a");
-
-    if(fp == NULL) {
-        printf("File error.\n");
-        return;
-    }
-
-    fprintf(fp,"%d %d %s %d %c %d %s %s\n",
-        t.booking_id,
-        t.train_id,
-        t.passenger_name,
-        t.age,
-        t.gender,
-        t.seat_number,
-        t.status,
-        t.emergency_contact);
-
-    fclose(fp);
-
-    finalFare = calculateFare(tr->fare, t.age);
-    discount = getDiscountPercent(t.age);
-
-    printf("\nTicket Confirmed!\n");
-
-    printf("\n====================================\n");
-    printf("           TRAIN TICKET\n");
-    printf("====================================\n");
-    printf("Booking ID : %d\n",t.booking_id);
-    printf("Passenger  : %s\n",t.passenger_name);
-    printf("Age        : %d\n",t.age);
-    printf("Gender     : %c\n",t.gender);
-    printf("Train ID   : %d\n",t.train_id);
-    printf("Seat No    : %d\n",t.seat_number);
-    printf("Base Fare  : %.0f\n",tr->fare);
-    printf("Discount   : %d%%\n",discount);
-    printf("Final Fare : %.0f\n",finalFare);
-    printf("Status     : %s\n",t.status);
-    printf("====================================\n");
-
-    printf("Processing....");
+    printf("\nProcessing completed.\n");
 }
 
 void viewBookings() {
     FILE *fp=fopen(TICKET_FILE,"r");
+    struct Ticket t;
+
     if(fp==NULL) {
-        printf(RED "No bookings found.\n" RESET);
+        printf("No bookings found.\n");
         return;
     }
 
-    struct Ticket t;
-    printf(CYAN);
     line();
-    printf("BookID | Passenger | Train | Seat | Coach | Status\n");
-    line();
-    printf(RESET);
-    while(fscanf(fp,"%d %d %s %d %c %d %s %s",
-        &t.booking_id,&t.train_id,t.passenger_name,
-        &t.age,&t.gender,&t.seat_number,
-        t.status,t.emergency_contact)==8) {
+    printf(CYAN "Bookings\n" RESET);
 
-        char coach[5];
-        getCoachName(t.seat_number, coach);
-        printf("%-6d | %-9s | %-5d | %-4d | %-5s | %s%s%s\n",
-            t.booking_id,t.passenger_name,
-            t.train_id,t.seat_number,coach,
-            strcmp(t.status,"CONFIRMED")==0 ? GREEN : RED,
-            t.status, RESET);
+    while(fscanf(fp,"%d %d %d %s %d %c %d %s %s",
+        &t.booking_id,
+        &t.pnr,
+        &t.train_id,
+        t.passenger_name,
+        &t.age,
+        &t.gender,
+        &t.seat_number,
+        t.status,
+        t.emergency_contact)==9) {
+
+        printf("%d | PNR:%d | %s | Train:%d | Seat:%d | %s\n",
+            t.booking_id,
+            t.pnr,
+            t.passenger_name,
+            t.train_id,
+            t.seat_number,
+            t.status);
     }
+
     fclose(fp);
     line();
-    printf("Processing...\n");
-    sleep(1);
 }
 
 void cancelTicket() {
     int cancel_id,found=0,i,count=0;
+    char confirm;
     struct Ticket all[200];
 
     printf("Enter Booking ID: ");
     scanf("%d",&cancel_id);
 
+    printf("Confirm cancellation? (Y/N): ");
+    scanf(" %c",&confirm);
+
+    if(confirm!='Y' && confirm!='y') {
+        printf("Cancellation stopped.\n");
+        return;
+    }
+
     FILE *fp=fopen(TICKET_FILE,"r");
-    if(fp==NULL) return;
 
-    while(fscanf(fp,"%d %d %s %d %c %d %s %s",
-        &all[count].booking_id,&all[count].train_id,
-        all[count].passenger_name,&all[count].age,
-        &all[count].gender,&all[count].seat_number,
-        all[count].status,all[count].emergency_contact)==8) {
+    if(fp==NULL) {
+        printf("No bookings found.\n");
+        return;
+    }
 
-        if(all[count].booking_id==cancel_id) {
+    while(fscanf(fp,"%d %d %d %s %d %c %d %s %s",
+        &all[count].booking_id,
+        &all[count].pnr,
+        &all[count].train_id,
+        all[count].passenger_name,
+        &all[count].age,
+        &all[count].gender,
+        &all[count].seat_number,
+        all[count].status,
+        all[count].emergency_contact)==9) {
+
+        if(all[count].booking_id==cancel_id &&
+           strcmp(all[count].status,"CONFIRMED")==0) {
             strcpy(all[count].status,"CANCELLED");
             found=1;
         }
+
         count++;
     }
+
     fclose(fp);
 
     fp=fopen(TICKET_FILE,"w");
+
     for(i=0;i<count;i++) {
-        fprintf(fp,"%d %d %s %d %c %d %s %s\n",
-            all[i].booking_id,all[i].train_id,
-            all[i].passenger_name,all[i].age,
-            all[i].gender,all[i].seat_number,
-            all[i].status,all[i].emergency_contact);
+        fprintf(fp,"%d %d %d %s %d %c %d %s %s\n",
+            all[i].booking_id,
+            all[i].pnr,
+            all[i].train_id,
+            all[i].passenger_name,
+            all[i].age,
+            all[i].gender,
+            all[i].seat_number,
+            all[i].status,
+            all[i].emergency_contact);
     }
+
     fclose(fp);
 
-    if(found) printf("Ticket Cancelled.\n");
-    else printf("Booking ID not found.\n");
-    printf("Processing.....");
+    if(found)
+        printf(RED "Ticket Cancelled.\n" RESET);
+    else
+        printf(RED "Booking ID not found or already cancelled.\n" RESET);
 }
 
 void searchTrain() {
-    char from[30],to[30],keyword[50];
-    int i,found=0,choice;
 
-    printf(CYAN "\n--- Search Options ---\n" RESET);
-    printf("1. Search by Route (From-To)\n");
-    printf("2. Search by Train Name (Keyword)\n");
+    int choice;
+    char from[30],to[30],key[50];
+    int i,found=0;
+    int trainChoice;
+    int nextChoice;
+
+    printf("\n1. Search by route\n");
+    printf("2. Search by train keyword\n");
+
     printf("Enter choice: ");
     scanf("%d",&choice);
 
     if(choice==1) {
+
         printf("From: ");
         scanf("%s",from);
+
         printf("To: ");
         scanf("%s",to);
-        printf("Trains found:\n");
+
+        printf("\nMatching Trains\n");
+        line();
+
         for(i=0;i<trainCount;i++) {
+
             if(strcmp(trains[i].from,from)==0 &&
                strcmp(trains[i].to,to)==0) {
-                printf("ID: %d | %s | Fare: %.0f | Platform: %d\n",
-                    trains[i].id,trains[i].name,
-                    trains[i].fare,trains[i].platform);
+
+                printf("Train ID : %d\n",trains[i].id);
+                printf("Train    : %s\n",trains[i].name);
+                printf("Fare     : %.0f\n",trains[i].fare);
+                printf("Platform : %d\n",trains[i].platform);
+
+                line();
                 found=1;
             }
         }
-        if(!found) printf(RED "No trains found for this route.\n" RESET);
-    } else if(choice==2) {
-        printf("Enter train name keyword: ");
-        scanf("%s",keyword);
-        printf("Trains found:\n");
-        for(i=0;i<trainCount;i++) {
-            if(strstr(trains[i].name, keyword)!=NULL) {
-                printf("ID: %d | %s | %s -> %s | Fare: %.0f\n",
-                    trains[i].id,trains[i].name,
-                    trains[i].from,trains[i].to,trains[i].fare);
-                found=1;
-            }
-        }
-        if(!found) printf(RED "No trains found with keyword '%s'.\n" RESET, keyword);
-    } else {
-        printf(RED "Invalid choice.\n" RESET);
+
     }
-    printf("Processing...\n");
+
+    else if(choice==2) {
+
+        printf("Enter keyword: ");
+        scanf("%s",key);
+
+        printf("\nMatching Trains\n");
+        line();
+
+        for(i=0;i<trainCount;i++) {
+
+            if(strstr(trains[i].name,key)!=NULL) {
+
+                printf("Train ID : %d\n",trains[i].id);
+                printf("Train    : %s\n",trains[i].name);
+
+                printf("Route    : %s to %s\n",
+                    trains[i].from,
+                    trains[i].to);
+
+                printf("Fare     : %.0f\n",
+                    trains[i].fare);
+
+                printf("Platform : %d\n",
+                    trains[i].platform);
+
+                line();
+
+                found=1;
+            }
+        }
+
+    }
+
+    else {
+        printf(RED "Invalid choice.\n" RESET);
+        return;
+    }
+
+    if(!found) {
+        printf(RED "No train found.\n" RESET);
+        return;
+    }
+
+    printf("\n1. Book Ticket\n");
+    printf("2. Go Back\n");
+
+    printf("Enter choice: ");
+    scanf("%d",&nextChoice);
+
+    if(nextChoice==2) {
+        printf("Returning to menu...\n");
+        return;
+    }
+
+    if(nextChoice!=1) {
+        printf(RED "Invalid choice.\n" RESET);
+        return;
+    }
+
+    printf("\nEnter Train ID to continue booking: ");
+    scanf("%d",&trainChoice);
+
+    if(findTrain(trainChoice)==NULL) {
+        printf(RED "Invalid Train ID.\n" RESET);
+        return;
+    }
+
+    printf("\nRedirecting to booking...\n");
     sleep(1);
+
+    int passengers;
+    int p;
+    int want_window;
+
+    struct Ticket t;
+
+    struct Train *tr=findTrain(trainChoice);
+
+    printf("Enter number of passengers: ");
+    scanf("%d",&passengers);
+
+    if(passengers<=0) {
+        printf(RED "Invalid number of passengers.\n" RESET);
+        return;
+    }
+
+    for(p=1;p<=passengers;p++) {
+        printf("\nPassenger %d Details\n",p);
+        t.train_id=trainChoice;
+
+        t.booking_id=generateBookingID();
+
+        t.pnr=generatePNR();
+
+        strcpy(t.status,"CONFIRMED");
+
+        printf("Passenger Name: ");
+        scanf("%s",t.passenger_name);
+
+        if(isDuplicateBooking(
+            t.passenger_name,
+            trainChoice)) {
+
+            printf(RED
+                "Duplicate booking found.\n"
+                RESET);
+
+            continue;
+        }
+
+        printf("Age: ");
+        scanf("%d",&t.age);
+
+        if(t.age<12) {
+
+            t.gender='C';
+
+        } else {
+            printf("Gender (M/F): ");
+            scanf(" %c",&t.gender);
+        }
+        printf("Emergency Contact: ");
+        scanf("%s",t.emergency_contact);
+        printf("Window seat required (1/0): ");
+        scanf("%d",&want_window);
+
+        loadSeatMap(trainChoice);
+
+        t.seat_number=allocateSeat(
+            t.gender,
+            t.age,
+            want_window
+        );
+
+        if(t.seat_number==-1) {
+
+            printf(RED
+                "No seats available.\n"
+                RESET);
+
+            continue;
+        }
+
+        FILE *fp=fopen(TICKET_FILE,"a");
+
+        if(fp==NULL) {
+
+            printf(RED
+                "File error.\n"
+                RESET);
+
+            return;
+        }
+
+        fprintf(fp,
+            "%d %d %d %s %d %c %d %s %s\n",
+
+            t.booking_id,
+            t.pnr,
+            t.train_id,
+            t.passenger_name,
+            t.age,
+            t.gender,
+            t.seat_number,
+            t.status,
+            t.emergency_contact
+        );
+
+        fclose(fp);
+
+        printf("\nTicket Confirmed!\n");
+
+        printTicket(t,tr);
+    }
+
+    printf("\nProcessing completed.\n");
 }
+
 
 void showSeatMap() {
     int tid,i;
-    int available=0, booked=0;
+    int available=0,booked=0;
 
     printf("Enter Train ID: ");
     scanf("%d",&tid);
 
+    if(findTrain(tid)==NULL) {
+        printf(RED "Train not found.\n" RESET);
+        return;
+    }
+
     loadSeatMap(tid);
 
-    printf("\nSeat Map\n\n");
+    printf(CYAN "\nSeat Map\n\n" RESET);
 
     for(i=1;i<=MAX_SEATS;i++) {
         if(seat_map[i]=='0') {
@@ -485,9 +808,7 @@ void showSeatMap() {
             printf("\n");
     }
 
-    printf("\nAliases: M = Male, F = Female, C = Child, Empty = Available\n");
+    printf("\nLegend: M = Male, F = Female, C = Child, Empty = Available\n");
     printf("Booked Seats    : %d\n",booked);
     printf("Available Seats : %d\n",available);
-
-    printf("\nProcessing.....\n");
 }
