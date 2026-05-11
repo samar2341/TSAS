@@ -91,7 +91,11 @@ int main(){
         printf("7. Show Ticket\n");
         printf("8. Exit\n");
         printf("\nEnter choice: ");
-        scanf("%d",&choice);
+        while(scanf("%d",&choice) != 1 || (choice < 1 || choice > 8)){
+            while(getchar() != '\n');
+            printf(RED "[!] Invalid input. Enter 1-8.\n" RESET);
+            printf("Enter choice: ");
+        }
         getchar();
         switch(choice){
             case 1:viewTrains();pauseMsg();break;
@@ -217,7 +221,7 @@ int isSandwiched(int seat){
 int allocateSeat(char gender,int age,int want_window){
     int seat;
     if(age<12){
-        for(seat=1;seat<=10;seat++){
+        for(seat=1;seat<=10 && seat<=MAX_SEATS;seat++){
             if(seat_map[seat]=='0') return seat;
         }
     }
@@ -225,6 +229,7 @@ int allocateSeat(char gender,int age,int want_window){
         for(seat=1;seat<=MAX_SEATS;seat++){
             if(seat_map[seat]=='0') return seat;
         }
+        return -1;
     }
     if(want_window==1){
         for(seat=1;seat<=MAX_SEATS;seat++){
@@ -318,7 +323,11 @@ void bookingProcess(int train_id){
         return;
     }
     printf("Enter number of passengers: ");
-    scanf("%d",&passengers);
+    while(scanf("%d",&passengers) != 1){
+        while(getchar() != '\n');
+        printf(RED "[!] Invalid input.\n" RESET);
+        printf("Enter number of passengers: ");
+    }
     getchar();
     if(passengers<=0){
         printf(RED "[!] Invalid number of passengers.\n" RESET);
@@ -331,27 +340,62 @@ void bookingProcess(int train_id){
         t.booking_id=generateBookingID();
         t.pnr=generatePNR();
         strcpy(t.status,"CONFIRMED");
-        printf("Passenger Name: ");
-        fgets(t.passenger_name,sizeof(t.passenger_name),stdin);
-        t.passenger_name[strcspn(t.passenger_name,"\n")]=0;
+        do{
+            printf("Passenger Name: ");
+            fgets(t.passenger_name,sizeof(t.passenger_name),stdin);
+            t.passenger_name[strcspn(t.passenger_name,"\n")]=0;
+            if(strlen(t.passenger_name)==0){
+                printf(RED "[!] Name cannot be empty.\n" RESET);
+                continue;
+            }
+            break;
+        }while(1);
         if(isDuplicateBooking(t.passenger_name,train_id)){
             printf(RED "[!] Duplicate booking found for this passenger.\n" RESET);
             continue;
         }
-        printf("Age: ");
-        scanf("%d",&t.age);
-        getchar();
+        do{
+            printf("Age: ");
+            while(scanf("%d",&t.age) != 1){
+                while(getchar() != '\n');
+                printf(RED "[!] Invalid input.\n" RESET);
+                printf("Age: ");
+            }
+            getchar();
+            if(t.age<=0 || t.age>120){
+                printf(RED "[!] Age must be between 1 and 120.\n" RESET);
+                continue;
+            }
+            break;
+        }while(1);
         if(t.age<12) t.gender='C';
         else{
-            printf("Gender (M/F): ");
-            scanf("%c",&t.gender);
-            getchar();
+            do{
+                printf("Gender (M/F): ");
+                scanf("%c",&t.gender);
+                getchar();
+                if(t.gender != 'M' && t.gender != 'F'){
+                    printf(RED "[!] Please enter M or F.\n" RESET);
+                }
+            }while(t.gender != 'M' && t.gender != 'F');
         }
         printf("Emergency Contact: ");
-        fgets(t.emergency_contact,sizeof(t.emergency_contact),stdin);
-        t.emergency_contact[strcspn(t.emergency_contact,"\n")]=0;
+        do{
+            fgets(t.emergency_contact,sizeof(t.emergency_contact),stdin);
+            t.emergency_contact[strcspn(t.emergency_contact,"\n")]=0;
+            if(strlen(t.emergency_contact)==0){
+                printf(RED "[!] Contact cannot be empty.\n" RESET);
+                printf("Emergency Contact: ");
+                continue;
+            }
+            break;
+        }while(1);
         printf("Window seat required (1/0): ");
-        scanf("%d",&want_window);
+        while(scanf("%d",&want_window) != 1 || (want_window != 0 && want_window != 1)){
+            while(getchar() != '\n');
+            printf(RED "[!] Invalid input. Enter 0 or 1.\n" RESET);
+            printf("Window seat required (1/0): ");
+        }
         getchar();
         loadSeatMap(train_id);
         loader("Checking seat availability");
@@ -382,7 +426,11 @@ void bookTicket(){
     int train_id;
     viewTrains();
     printf("\nEnter Train ID: ");
-    scanf("%d",&train_id);
+    while(scanf("%d",&train_id) != 1){
+        while(getchar() != '\n');
+        printf(RED "[!] Invalid input.\n" RESET);
+        printf("Enter Train ID: ");
+    }
     getchar();
     bookingProcess(train_id);
 }
@@ -429,7 +477,11 @@ void showTicketByID(){
         return;
     }
     printf("Enter Booking ID: ");
-    scanf("%d",&id);
+    while(scanf("%d",&id) != 1){
+        while(getchar() != '\n');
+        printf(RED "[!] Invalid input.\n" RESET);
+        printf("Enter Booking ID: ");
+    }
     getchar();
     loader("Searching ticket");
     while(fscanf(fp,"%d %d %d %49s %d %c %d %14s %14s",
@@ -454,12 +506,20 @@ void showTicketByID(){
 void cancelTicket(){
     int cancel_id,found=0,i,count=0;
     char confirm;
-    struct Ticket all[200];
+    struct Ticket all[500];
     printf("Enter Booking ID: ");
-    scanf("%d",&cancel_id);
+    while(scanf("%d",&cancel_id) != 1){
+        while(getchar() != '\n');
+        printf(RED "[!] Invalid input.\n" RESET);
+        printf("Enter Booking ID: ");
+    }
     getchar();
     printf("Confirm cancellation? (Y/N): ");
-    scanf("%c",&confirm);
+    while(scanf("%c",&confirm) != 1){
+        while(getchar() != '\n');
+        printf(RED "[!] Invalid input.\n" RESET);
+        printf("Confirm cancellation? (Y/N): ");
+    }
     getchar();
     if(confirm!='Y' && confirm!='y'){
         printf("Cancellation stopped.\n");
@@ -480,6 +540,7 @@ void cancelTicket(){
             found=1;
         }
         count++;
+        if(count >= 500) break;
     }
     fclose(fp);
     loader("Cancelling ticket");
@@ -502,7 +563,11 @@ void searchTrain(){
     printf("\n1. Search by route\n");
     printf("2. Search by train keyword\n");
     printf("Enter choice: ");
-    scanf("%d",&choice);
+    while(scanf("%d",&choice) != 1 || (choice != 1 && choice != 2)){
+        while(getchar() != '\n');
+        printf(RED "[!] Invalid input. Enter 1 or 2.\n" RESET);
+        printf("Enter choice: ");
+    }
     getchar();
     loader("Searching trains");
     line();
@@ -552,18 +617,22 @@ void searchTrain(){
     printf("\n1. Book Ticket\n");
     printf("2. Go Back\n");
     printf("Enter choice: ");
-    scanf("%d",&nextChoice);
+    while(scanf("%d",&nextChoice) != 1 || (nextChoice != 1 && nextChoice != 2)){
+        while(getchar() != '\n');
+        printf(RED "[!] Invalid input. Enter 1 or 2.\n" RESET);
+        printf("Enter choice: ");
+    }
     getchar();
     if(nextChoice==2){
         printf("Returning to menu...\n");
         return;
     }
-    if(nextChoice!=1){
-        printf(RED "[!] Invalid choice.\n" RESET);
-        return;
-    }
     printf("Enter Train ID to continue booking: ");
-    scanf("%d",&trainChoice);
+    while(scanf("%d",&trainChoice) != 1){
+        while(getchar() != '\n');
+        printf(RED "[!] Invalid input.\n" RESET);
+        printf("Enter Train ID to continue booking: ");
+    }
     getchar();
     bookingProcess(trainChoice);
 }
@@ -573,7 +642,11 @@ void showSeatMap(){
     struct Train *tr;
     char coach[5];
     printf("Enter Train ID: ");
-    scanf("%d",&tid);
+    while(scanf("%d",&tid) != 1){
+        while(getchar() != '\n');
+        printf(RED "[!] Invalid input.\n" RESET);
+        printf("Enter Train ID: ");
+    }
     getchar();
     tr = findTrain(tid);
     if(tr==NULL){
